@@ -56,11 +56,13 @@ public static class WebScraper
                             var dbResponse = await container.ReplaceItemAsync(newDbItem, newDbItem.Id);
                             var body = @$"<p>Check out https://boulderhousing.org/now-renting. An automated script detected a change in the list of apartments.</p>
 
+<h2>NOW:</h2>
+{apartmentInfo}
+(hash: {hash})
+
 <h2>BEFORE:</h2>
 {dbItem.Apartments}
-
-<h2>NOW:</h2>
-{apartmentInfo}";
+(hash: {dbItem.Hash}";
 
                             var message = new SendGridMessage();
                             message.AddTo("rdogmartin@gmail.com", "Roger Martin");
