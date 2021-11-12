@@ -1,3 +1,4 @@
+using HtmlAgilityPack;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Extensions.Logging;
@@ -23,13 +24,18 @@ public static class WebScraper
         var httpClient = new HttpClient();
         var pageContent = await httpClient.GetStringAsync("https://boulderhousing.org/now-renting");
 
+        var pageDocument = new HtmlDocument();
+        pageDocument.LoadHtml(pageContent);
+        var apartmentHeadlines = pageDocument.DocumentNode.SelectNodes("//strong[contains(text(),\"Available:\")]");
+        var apartmentInfo = apartmentHeadlines.Select(x => $"<p>{x.InnerText}</p>").Aggregate((accumulator, apartment) => $"{accumulator} {apartment}");
+
         using (SHA256 mySHA256 = SHA256.Create())
         {
             if (!string.IsNullOrEmpty(pageContent))
             {
                 var hash = BitConverter.ToString(mySHA256.ComputeHash(System.Text.Encoding.Default.GetBytes(pageContent)));
 
-                log.LogInformation($"INFO: Hash: {hash}");
+                //log.LogInformation($"INFO: Hash: {hash}");
                 var container = cosmosClient.GetDatabase("tis-cosmos-db").GetContainer("web-scraper");
                 var queryDefinition = new QueryDefinition("SELECT * FROM items");
                 using (var resultSet = container.GetItemQueryIterator<WebScrape>(queryDefinition))
@@ -41,18 +47,27 @@ public static class WebScraper
 
                         if (dbItem.Hash == hash)
                         {
-                            log.LogInformation("INFO: No changes to web page");
-                        } else
+                            //log.LogInformation("INFO: No changes to web page");
+                        }
+                        else
                         {
                             log.LogInformation("INFO: Web page has changed");
-                            var newDbItem = new WebScrape(dbItem.Id, hash);
+                            var newDbItem = new WebScrape(dbItem.Id, hash, apartmentInfo);
                             var dbResponse = await container.ReplaceItemAsync(newDbItem, newDbItem.Id);
+                            var body = @$"<p>Check out https://boulderhousing.org/now-renting. An automated script detected a change in the list of apartments.</p>
+
+<h2>BEFORE:</h2>
+{dbItem.Apartments}
+
+<h2>NOW:</h2>
+{apartmentInfo}";
 
                             var message = new SendGridMessage();
-                            message.AddTo("rdogmartin@gmail.com");
-                            message.AddContent("text/html", "There may be a new rental at https://boulderhousing.org/now-renting");
-                            message.SetFrom(new EmailAddress("roger@techinfosystems.com"));
-                            message.SetSubject("INFO: Web page has changed");
+                            message.AddTo("rdogmartin@gmail.com", "Roger Martin");
+                            message.AddTo("ask2752@gmail.com", "Aleka Mayr");
+                            message.AddContent("text/html", body);
+                            message.SetFrom(new EmailAddress("roger@techinfosystems.com", "Roger Bot"));
+                            message.SetSubject("Alert: Potential new apartment in Boulder");
 
                             await messageCollector.AddAsync(message);
                         }
