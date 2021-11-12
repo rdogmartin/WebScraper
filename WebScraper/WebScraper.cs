@@ -33,7 +33,7 @@ public static class WebScraper
         {
             if (!string.IsNullOrEmpty(pageContent))
             {
-                var hash = BitConverter.ToString(mySHA256.ComputeHash(System.Text.Encoding.Default.GetBytes(pageContent)));
+                var hash = BitConverter.ToString(mySHA256.ComputeHash(System.Text.Encoding.Default.GetBytes(apartmentInfo)));
 
                 //log.LogInformation($"INFO: Hash: {hash}");
                 var container = cosmosClient.GetDatabase("tis-cosmos-db").GetContainer("web-scraper");
